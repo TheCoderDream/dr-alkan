@@ -73,7 +73,7 @@ async function handleClinic(req:Request){
   if(req.method==='GET'&&!section){
     const settings=await getSettings(u.id);const result=await db().prepare('SELECT * FROM clinic_records WHERE owner_id=? ORDER BY created_at DESC').bind(u.id).all<Row>();
     const by=(kind:string)=>result.results.filter(r=>r.kind===kind).map(r=>JSON.parse(r.data));
-    return json({settings:settings||defaults,initialized:!!settings,patients:by('patient'),visits:by('visit'),consents:by('consent'),media:by('media').map(({key,...m}:Media)=>m),audit:by('audit').slice(0,60),user:{name:u.name,email:u.email}});
+    return json({capabilities:{photos:!!env.BUCKET},authMode:env.CLINIC_AUTH_MODE||'sites',settings:settings||defaults,initialized:!!settings,patients:by('patient'),visits:by('visit'),consents:by('consent'),media:by('media').map(({key,...m}:Media)=>m),audit:by('audit').slice(0,60),user:{name:u.name,email:u.email}});
   }
   if(req.method==='POST'&&!section){const b=await body(req);if(b.action!=='initialize')fail('invalidRequest');await initialize(u.id);return json({ok:true});}
   if(section==='settings'&&req.method==='PATCH'){
@@ -121,6 +121,7 @@ async function handleClinic(req:Request){
     const c=await record<Consent>(u.id,id,'consent');return consentDocument(u.id,c);
   }
   if(section==='media'&&req.method==='POST'){
+    if(!env.BUCKET)fail('photosUnavailable',503);
     originGuard(req);const form=await req.formData();const file=form.get('file');if(!(file instanceof File)||file.size>8*1024*1024||file.size<12)fail('invalidImage');if(form.get('permission')!=='true')fail('photoPermission');
     const upload=file as File;const v=await record<Visit>(u.id,String(form.get('visitId')),'visit');const stage=z.enum(['before','after']).parse(form.get('stage'));const angle=z.enum(['front','left','right']).parse(form.get('angle'));const buf=await upload.arrayBuffer();const a=new Uint8Array(buf);let mime='';if(a[0]===255&&a[1]===216)mime='image/jpeg';else if(a[0]===137&&a[1]===80&&a[2]===78&&a[3]===71)mime='image/png';else if(String.fromCharCode(...a.slice(0,4))==='RIFF'&&String.fromCharCode(...a.slice(8,12))==='WEBP')mime='image/webp';if(!mime)fail('invalidImage');
     if(!env.BUCKET)fail('storageUnavailable',503);const id=uid();const key=u.id+'/'+id;await env.BUCKET!.put(key,buf,{httpMetadata:{contentType:mime}});const m:Media={id,patientId:v.patientId,visitId:v.id,stage,angle,mime,size:upload.size,key,createdAt:now()};

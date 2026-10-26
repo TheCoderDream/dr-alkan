@@ -7,8 +7,9 @@ import {generateKeyPair,exportJWK,SignJWT} from 'jose';
 const out=resolve('outputs/access-tests');await mkdir(out,{recursive:true});
 const compile=source=>ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
 await writeFile(out+'/access.mjs',compile(await readFile('lib/clinic/access.ts','utf8')));
+await writeFile(out+'/password.mjs',compile(await readFile('lib/clinic/password.ts','utf8')));
 let worker=await readFile('worker/index.ts','utf8');
-worker=worker.replace("'../lib/clinic/access'","'./access.mjs'").replace('"vinext/server/fetch-handler"','"./handler.mjs"').replace('"../lib/connector-context"','"./context.mjs"').replaceAll('import.meta.env.DEV','false');
+worker=worker.replace("'../lib/clinic/password'","'./password.mjs'").replace("'../lib/clinic/access'","'./access.mjs'").replace('"vinext/server/fetch-handler"','"./handler.mjs"').replace('"../lib/connector-context"','"./context.mjs"').replaceAll('import.meta.env.DEV','false');
 await writeFile(out+'/worker.mjs',compile(worker));
 await writeFile(out+'/handler.mjs',`export default {fetch:r=>Response.json({id:r.headers.get('oai-authenticated-user-id'),email:r.headers.get('oai-authenticated-user-email')})};`);
 await writeFile(out+'/context.mjs',`export const runWithConnectorBinding=(_,fn)=>fn();`);
@@ -35,5 +36,14 @@ try{
   const intake=await call('/api/intake/token');assert.equal(intake.status,200);assert.deepEqual(await intake.json(),{id:null,email:null});
   const site=await call('/api/clinic',undefined,{});assert.equal((await site.json()).id,'spoofed');
   assert.equal((await call('/signout-with-chatgpt')).headers.get('location'),'https://clinic.test/cdn-cgi/access/logout');
+  const passwordEnv={CLINIC_AUTH_MODE:'password',STAFF_USERNAME:'doctor',STAFF_PASSWORD:'a-test-password-at-least-24-characters',STAFF_EMAIL:'doctor@example.com'};
+  const passwordCall=(credential,settings=passwordEnv)=>app.fetch(new Request('https://clinic.test/api/clinic',{headers:{authorization:'Basic '+btoa(credential),'oai-authenticated-user-id':'spoofed'}}),settings,{});
+  const insecure=await app.fetch(new Request('http://clinic.test/api/clinic'),passwordEnv,{});assert.equal(insecure.status,308);assert.equal(insecure.headers.get('location'),'https://clinic.test/api/clinic');
+  const signedIn=await passwordCall('doctor:'+passwordEnv.STAFF_PASSWORD);assert.equal(signedIn.status,200);assert.equal((await signedIn.json()).id,'clinic:dr-alkan');
+  assert.equal((await passwordCall('doctor:wrong')).status,401);
+  assert.equal((await passwordCall('wrong:'+passwordEnv.STAFF_PASSWORD)).status,401);
+  assert.equal((await passwordCall('doctor:'+passwordEnv.STAFF_PASSWORD,{...passwordEnv,STAFF_PASSWORD:undefined})).status,401);
+  assert.match((await passwordCall('wrong')).headers.get('www-authenticate'),/^Basic /);
+  console.log('PASS password sign-in, invalid username/password, missing secret, challenge and owner isolation');
   console.log('PASS Access JWT signatures, expiry, audience, required identity, missing config, header spoofing, scoped intake bypass, existing Site behavior and logout');
 }finally{globalThis.fetch=fetchBefore;}

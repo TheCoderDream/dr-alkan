@@ -28,6 +28,12 @@ await check('doctor branding replaces legacy defaults while preserving custom se
   const custom=(await request('clinic')).body.settings;assert.equal(custom.name,'Custom clinic');assert.equal(custom.clinician,'Custom doctor');
   await env.DB.prepare('UPDATE clinic_settings SET data=? WHERE owner_id=?').bind(JSON.stringify(initial),owner).run();
 });
+await check('deployments without photo storage advertise and enforce disabled uploads',async()=>{
+  const {env}=await import(pathToFileURL(out+'/platform.mjs'));const bucket=env.BUCKET;
+  try{delete env.BUCKET;assert.equal((await request('clinic')).body.capabilities.photos,false);const upload=await request('clinic/media',new FormData());assert.equal(upload.status,503);assert.equal(upload.body.error,'photosUnavailable');}
+  finally{env.BUCKET=bucket;}
+  assert.equal((await request('clinic')).body.capabilities.photos,true);
+});
 const p=(await request('clinic/patients',{name:'Contract Test',email:'contract@example.com',phone:'+900000000000',dob:'1990-01-01',language:'en',notes:''})).body;
 const visit=(await request('clinic/visits',{patientId:p.id,date:'2030-01-15',time:'10:45',duration:30,treatments:['botox'],clinician:'Example clinician',followup:false,reminder:true,channel:'sms',notes:''})).body;
 await check('other owners cannot change a patient or retrieve its records',async()=>{assert.equal((await request('clinic/patients/'+p.id,{name:'Other',email:'',phone:'123456',dob:'',language:'en',notes:''},'PATCH','different-owner')).status,404);assert.equal((await request('clinic/patients/'+p.id+'/export',undefined,'GET','different-owner')).status,404);});

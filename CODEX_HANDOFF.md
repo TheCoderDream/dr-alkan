@@ -58,3 +58,9 @@ The published app passed TypeScript checks, a production build, 17 integration c
 ## Standalone deployment preparation
 
 The project is being pushed to TheCoderDream/dr-alkan. See DEPLOYMENT.md. Standalone builds opt into Cloudflare Access JWT verification at the Worker boundary and strip untrusted identity headers; Site-hosted behavior remains unchanged. Account setup and real deployment remain pending. Use pnpm test:access with the existing clinic checks.
+
+## Free deployment decision
+
+The user connected Cloudflare but declined usage-based billing. Deploy with CLINIC_DISABLE_PHOTOS=true and CLINIC_AUTH_MODE=password; do not enable R2, Zero Trust billing, or Workers Paid. Photo capability is advertised by the API and uploads fail closed without BUCKET. Staff use a generated HTTPS Basic password for one workspace; credentials/config/account state remain ignored under .sites-runtime and wrangler.production.json. See DEPLOYMENT.md.
+
+The free version is deployed at https://dr-alkan.3mr3baskan.workers.dev. D1 schema is applied; no local records were imported. It initializes fictional samples. Local staff login details are in ignored .sites-runtime/STAFF_LOGIN.txt; never print or commit the password. Cloudflare Wrangler login is connected on this machine. Live tests verified auth, forged-header rejection, database initialization, no-photo enforcement, scoped patient access and invalid tokens.

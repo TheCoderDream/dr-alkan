@@ -1,5 +1,31 @@
 # Deploy Dr. Alkan Aesthetic to Cloudflare Workers
 
+## Current free deployment
+
+The user declined all usage-billed subscriptions. The selected configuration uses Workers Free and D1 Free, **no R2**, and **no Cloudflare Zero Trust subscription**. Staff access uses a generated high-entropy HTTPS Basic password. The Worker secret is stored through Wrangler; it is never committed. The shared password grants one clinic workspace, not separate staff accounts. Use a private browser window and close it after use; browsers cache Basic credentials and do not provide reliable application-level logout.
+
+Photo uploads are disabled by the absence of the BUCKET binding, enforced by the API and labeled in all ten UI locales. Local development still has R2 emulation and photo support. At free-tier limits, service can stop until limits reset; do not upgrade plans without the user's permission.
+
+Configure this mode with:
+
+```sh
+export CLOUDFLARE_ACCOUNT_ID='YOUR_ACCOUNT_ID'
+export CLINIC_D1_DATABASE_ID='YOUR_DATABASE_ID'
+export CLINIC_DISABLE_PHOTOS=true
+export CLINIC_AUTH_MODE=password
+export STAFF_USERNAME=dralkan
+export STAFF_EMAIL='YOUR_STAFF_EMAIL'
+pnpm configure:cloudflare
+pnpm db:migrate:cloudflare
+pnpm build:cloudflare
+pnpm exec wrangler deploy --config dist/server/wrangler.json
+pnpm exec wrangler secret put STAFF_PASSWORD --config wrangler.production.json
+```
+
+Set a generated random password of at least 24 characters. Missing or short passwords fail closed. No password belongs in environment variables committed to source or in the generated configuration. Keep local credential files under ignored `.sites-runtime/` with owner-only permissions. Retrieve the deployment URL from Wrangler's successful deploy output.
+
+The Access/R2 setup below is an optional alternative and was **not activated**. Cloudflare currently asks for a payment method and usage-billing consent even at its Zero Trust Free checkout.
+
 ## Hosting choice
 
 This full-stack Vinext app uses **Cloudflare Workers**, **D1** for records, and a **private R2 bucket** for photos. Netlify is not a drop-in target: the Cloudflare Vite plugin, `cloudflare:workers` imports, D1/R2 storage, and authentication would need adapting. Uploading only the static client would omit the APIs and signing workflow. Cloudflare Workers retains the existing architecture.
